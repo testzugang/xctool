@@ -24,7 +24,18 @@
 
 #import "DuplicateTestNameFix.h"
 #import "ParseTestName.h"
+#import "Swizzle.h"
 #import "TestingFramework.h"
+
+static id NSUserDefaults_BlankStandard(Class cls, SEL cmd)
+{
+  return nil;
+}
+
+static id NSUserDefaults_BlankRequestForKey(id self, SEL sel, id arg1)
+{
+  return nil;
+}
 
 @implementation OtestQuery
 
@@ -89,6 +100,22 @@
   [[NSUserDefaults standardUserDefaults] removeObjectForKey:
    [framework objectForKey:kTestingFrameworkFilterTestArgsKey]];
   [[NSUserDefaults standardUserDefaults] synchronize];
+
+  //  But we couldn't just clear [NSUserDefaults standardUserDefualts] as there is
+  // 'cfprefsd' daemon that caches the preferences and sometimes returns not
+  // cleared data.
+  //
+  // By swizzling [NSUserDefaults standardUserDefaults] and [NSUserDefaults *ForKey:]
+  // methods we will be sure that 'SenTest' and 'XCTest' will not read any data from
+  // the preferences and so we will prevent tests from running.
+  XTSwizzleClassSelectorForFunction([NSUserDefaults class], @selector(standardUserDefaults), (IMP)NSUserDefaults_BlankStandard);
+  XTSwizzleSelectorForFunction([NSUserDefaults class], @selector(objectForKey:), (IMP)NSUserDefaults_BlankRequestForKey);
+  XTSwizzleSelectorForFunction([NSUserDefaults class], @selector(valueForKey:), (IMP)NSUserDefaults_BlankRequestForKey);
+  XTSwizzleSelectorForFunction([NSUserDefaults class], @selector(stringForKey:), (IMP)NSUserDefaults_BlankRequestForKey);
+  XTSwizzleSelectorForFunction([NSUserDefaults class], @selector(arrayForKey:), (IMP)NSUserDefaults_BlankRequestForKey);
+  XTSwizzleSelectorForFunction([NSUserDefaults class], @selector(dictionaryForKey:), (IMP)NSUserDefaults_BlankRequestForKey);
+  XTSwizzleSelectorForFunction([NSUserDefaults class], @selector(dataForKey:), (IMP)NSUserDefaults_BlankRequestForKey);
+  XTSwizzleSelectorForFunction([NSUserDefaults class], @selector(stringArrayForKey:), (IMP)NSUserDefaults_BlankRequestForKey);
 
   // We use dlopen() instead of -[NSBundle loadAndReturnError] because, if
   // something goes wrong, dlerror() gives us a much more helpful error message.
